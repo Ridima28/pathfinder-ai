@@ -7,7 +7,7 @@
 <p><strong>Your AI-Powered Career Coach & Resume Builder</strong></p>
 
 <p>
-  PathFinder AI is an intelligent web application that helps you craft professional resumes, write tailored cover letters, and prepare for interviews — all powered by AI. 
+  PathFinder AI is an intelligent web application that helps you craft professional resumes, write tailored cover letters, and prepare for interviews all powered by AI. 
   Whether you're launching your career or making your next big move, Pathfinder is your personalized guide.
 </p>
 
