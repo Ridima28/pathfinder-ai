@@ -1,24 +1,34 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 const useFetch = (cb) => {
   const [data, setData] = useState(undefined);
   const [loading, setLoading] = useState(null);
   const [error, setError] = useState(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const fn = async (...args) => {
-    setLoading(true);
-    setError(null);
+    if (isMounted.current) setLoading(true);
+    if (isMounted.current) setError(null);
 
     try {
       const response = await cb(...args);
-      setData(response);
-      setError(null);
-    } catch (error) {
-      setError(error);
-      toast.error(error.message);
+      if (isMounted.current) {
+        setData(response);
+        setError(null);
+      }
+    } catch (err) {
+      if (isMounted.current) setError(err);
+      toast.error(err.message || "An error occurred");
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
   };
 

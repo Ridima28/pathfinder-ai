@@ -21,11 +21,14 @@ export async function generateQuiz() {
 
   if (!user) throw new Error("User not found");
 
+  // Normalize skills to remove duplicates and empty values
+  const normalizedSkills = user.skills
+    ? Array.from(new Set(user.skills.map((s) => String(s).trim()).filter(Boolean)))
+    : [];
+
   const prompt = `
-    Generate 10 technical interview questions for a ${
-      user.industry
-    } professional${
-    user.skills?.length ? ` with expertise in ${user.skills.join(", ")}` : ""
+    Generate 10 technical interview questions for a ${user.industry} professional${
+    normalizedSkills.length ? ` with expertise in ${normalizedSkills.join(", ")}` : ""
   }.
     
     Each question should be multiple choice with 4 options.
@@ -67,13 +70,26 @@ export async function saveQuizResult(questions, answers, score) {
 
   if (!user) throw new Error("User not found");
 
-  const questionResults = questions.map((q, index) => ({
-    question: q.question,
-    answer: q.correctAnswer,
-    userAnswer: answers[index],
-    isCorrect: q.correctAnswer === answers[index],
-    explanation: q.explanation,
-  }));
+  // Ensure answers array aligns with questions length
+  const sanitizedAnswers = Array.isArray(answers) ? answers.slice(0, questions.length) : [];
+  while (sanitizedAnswers.length < questions.length) sanitizedAnswers.push(null);
+
+  // Build question results and dedupe by question text to avoid duplicates
+  const questionMap = new Map();
+  questions.forEach((q, index) => {
+    const key = String(q.question).trim();
+    if (!questionMap.has(key)) {
+      questionMap.set(key, {
+        question: key,
+        answer: q.correctAnswer,
+        userAnswer: sanitizedAnswers[index],
+        isCorrect: q.correctAnswer === sanitizedAnswers[index],
+        explanation: q.explanation,
+      });
+    }
+  });
+
+  const questionResults = Array.from(questionMap.values());
 
   // Get wrong answers
   const wrongAnswers = questionResults.filter((q) => !q.isCorrect);
