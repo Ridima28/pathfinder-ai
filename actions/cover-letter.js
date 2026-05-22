@@ -1,152 +1,151 @@
-"use server";
+"use server" || "use client"; // Retain your framework's directive
 
-import { db } from "@/lib/prisma";
-import { auth } from "@clerk/nextjs/server";
-import { generateGeminiContent } from "@/lib/gemini";
+import React, { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import useFetch from "@/hooks/use-fetch";
+import { generateCoverLetter } from "@/actions/cover-letter";
+import { coverLetterSchema } from "@/app/lib/schema";
 
-/**
- * Generates a professional cover letter using Gemini AI.
- * If AI generation fails, saves a high-quality fallback cover letter.
- */
-export async function generateCoverLetter(data) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+export default function CoverLetterGenerator() {
+  const router = useRouter();
 
-  const user = await db.user.findUnique({
-    where: { clerkUserId: userId },
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm({
+    resolver: zodResolver(coverLetterSchema),
   });
-  if (!user) throw new Error("User not found");
 
-  if (!data?.jobTitle || !data?.companyName || !data?.jobDescription) {
-    throw new Error("Missing required fields");
-  }
+  const {
+    loading,
+    data: generatedLetter,
+    error,
+    fn: generateLetterFn,
+  } = useFetch(generateCoverLetter);
 
-  const prompt = `
-Write a professional cover letter for a ${data.jobTitle} position at ${data.companyName}.
+  useEffect(() => {
+    if (generatedLetter) {
+      // 1. Check if the backend caught an AI error and returned a fallback payload
+      if (generatedLetter._errorCode) {
+        let errorMessage = "AI generation failed. A basic fallback template has been generated.";
 
-Candidate Details:
-- Name: ${user.name || "Candidate"}
-- Industry: ${user.industry || "Technology"}
-- Experience: ${user.experience || "0"} years
-- Skills: ${user.skills?.join(", ") || "Not specified"}
-- Background: ${user.bio || "Not specified"}
+        switch (generatedLetter._errorCode) {
+          case "RATE_LIMITED":
+            errorMessage = "AI quota reached / rate limited. A fallback letter was generated — please try again later.";
+            break;
+          case "SERVICE_UNAVAILABLE":
+            errorMessage = "Gemini service is currently down. A fallback letter was saved for you.";
+            break;
+          case "TIMEOUT":
+            errorMessage = "The AI request timed out. A fallback letter was generated.";
+            break;
+          default:
+            errorMessage = "An unexpected AI error occurred. A fallback letter was generated.";
+        }
 
-Job Description:
-${data.jobDescription}
+        toast.warning(errorMessage, { duration: 6000 });
+        // Redirect the user anyway since a database fallback entry exists
+        router.push(`/ai-cover-letter/${generatedLetter.id}`);
+        return;
+      }
 
-Requirements:
-- Professional, engaging, and persuasive tone
-- Max 400 words
-- Highlight how the candidate's skills and experience match the job description
-- Use markdown formatting for readability
-`;
+      // 2. Ideal path: AI generation succeeded perfectly
+      toast.success("Cover letter generated successfully!");
+      router.push(`/ai-cover-letter/${generatedLetter.id}`);
+      reset();
+    }
+  }, [generatedLetter, router, reset]);
 
-  try {
-    const result = await generateGeminiContent(prompt);
-    const content = result.response.text().trim();
+  useEffect(() => {
+    if (error) {
+      toast.error(error.message || "Failed to generate cover letter");
+    }
+  }, [error]);
 
-    if (!content) throw new Error("AI response was empty.");
+  const onSubmit = async (data) => {
+    try {
+      await generateLetterFn(data);
+    } catch (err) {
+      toast.error("An unexpected error occurred. Please try again.");
+    }
+  };
 
-    const coverLetter = await db.coverLetter.create({
-      data: {
-        content,
-        companyName: data.companyName,
-        jobTitle: data.jobTitle,
-        jobDescription: data.jobDescription,
-        status: "completed",
-        userId: user.id,
-      },
-    });
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Cover Letter Generator</CardTitle>
+          <CardDescription>
+            Create a tailored, professional cover letter based on your profile and target job description.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="companyName">Company Name</Label>
+                <Input
+                  id="companyName"
+                  placeholder="e.g. Google, Acme Corp"
+                  {...register("companyName")}
+                />
+                {errors.companyName && (
+                  <p className="text-sm text-destructive">{errors.companyName.message}</p>
+                )}
+              </div>
 
-    return coverLetter;
-  } catch (error) {
-    console.error("Error generating cover letter, using fallback:", error);
-    const errorCode = error?.code || "UNKNOWN";
+              <div className="space-y-2">
+                <Label htmlFor="jobTitle">Job Title</Label>
+                <Input
+                  id="jobTitle"
+                  placeholder="e.g. Frontend Engineer"
+                  {...register("jobTitle")}
+                />
+                {errors.jobTitle && (
+                  <p className="text-sm text-destructive">{errors.jobTitle.message}</p>
+                )}
+              </div>
+            </div>
 
-    const fallbackContent = `
-# Cover Letter
+            <div className="space-y-2">
+              <Label htmlFor="jobDescription">Job Description / Requirements</Label>
+              <Textarea
+                id="jobDescription"
+                placeholder="Paste the job requirements or full description here..."
+                className="min-h-[150px]"
+                {...register("jobDescription")}
+              />
+              {errors.jobDescription && (
+                <p className="text-sm text-destructive">{errors.jobDescription.message}</p>
+              )}
+            </div>
 
-Dear Hiring Manager,
-
-I am writing to express my interest in the ${data.jobTitle} position at ${data.companyName}. 
-
-Based on my background in the ${user.industry || "relevant"} industry and my experience, I believe I can bring valuable skills to your team. I would love the opportunity to discuss how my qualifications align with your needs.
-
-Thank you for your time and consideration.
-
-Sincerely,
-${user.name || "Candidate"}
-`;
-
-    const coverLetter = await db.coverLetter.create({
-      data: {
-        content: fallbackContent.trim(),
-        companyName: data.companyName,
-        jobTitle: data.jobTitle,
-        jobDescription: data.jobDescription,
-        status: "fallback",
-        userId: user.id,
-      },
-    });
-
-    return { ...coverLetter, _errorCode: errorCode };
-  }
-}
-
-/**
- * Fetches all cover letters for the signed-in user, newest first.
- */
-export async function getCoverLetters() {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
-
-  const user = await db.user.findUnique({
-    where: { clerkUserId: userId },
-  });
-  if (!user) throw new Error("User not found");
-
-  return db.coverLetter.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-  });
-}
-
-/**
- * Fetches a single cover letter by ID (ownership-checked).
- */
-export async function getCoverLetter(id) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
-
-  const user = await db.user.findUnique({
-    where: { clerkUserId: userId },
-  });
-  if (!user) throw new Error("User not found");
-
-  return db.coverLetter.findFirst({
-    where: {
-      id,
-      userId: user.id,
-    },
-  });
-}
-
-/**
- * Deletes a specific cover letter record (ownership-checked).
- */
-export async function deleteCoverLetter(id) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
-
-  const user = await db.user.findUnique({
-    where: { clerkUserId: userId },
-  });
-  if (!user) throw new Error("User not found");
-
-  return db.coverLetter.delete({
-    where: {
-      id,
-      userId: user.id,
-    },
-  });
+            <div className="flex justify-end gap-4">
+              <Button type="submit" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating tailored letter...
+                  </>
+                ) : (
+                  "Generate Cover Letter"
+                )}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
