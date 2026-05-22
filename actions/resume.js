@@ -3,14 +3,24 @@
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
-
-
 import { generateGeminiContent } from "@/lib/gemini";
 
+// New validation imports
+import { validateInput } from "@/lib/validate";
+import { resumeSaveSchema, resumeImprovementSchema } from "@/lib/schemas/forms";
 
-export async function saveResume(content) {
+export async function saveResume(rawContent) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
+
+  // 1. Edge input boundary validation
+  const validation = validateInput(resumeSaveSchema, { content: rawContent });
+  if (!validation.success) {
+    return { success: false, errors: validation.errors };
+  }
+
+  // Use verified safe text data
+  const { content } = validation.data;
 
   const user = await db.user.findUnique({
     where: { clerkUserId: userId },
@@ -33,10 +43,11 @@ export async function saveResume(content) {
     });
 
     revalidatePath("/resume");
-    return resume;
+    // Return structured success container matching client parsing patterns
+    return { success: true, data: resume };
   } catch (error) {
     console.error("Error saving resume:", error);
-    throw new Error("Failed to save resume");
+    return { success: false, errors: { _form: ["Failed to save resume securely."] } };
   }
 }
 
@@ -58,9 +69,18 @@ export async function getResume() {
   });
 }
 
-export async function improveWithAI({ current, type }) {
+export async function improveWithAI(rawParams) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
+
+  // 1. Edge input boundary validation
+  const validation = validateInput(resumeImprovementSchema, rawParams);
+  if (!validation.success) {
+    return { success: false, errors: validation.errors };
+  }
+
+  // Use verified safe and sanitized values
+  const { current, type } = validation.data;
 
   const user = await db.user.findUnique({
     where: { clerkUserId: userId },
@@ -72,7 +92,7 @@ export async function improveWithAI({ current, type }) {
   if (!user) throw new Error("User not found");
 
   const prompt = `
-    As an expert resume writer, improve the following ${type} description for a ${user.industry} professional.
+    As an expert resume writer, improve the following ${type} description for a ${user.industry || "professional"} professional.
     Make it more impactful, quantifiable, and aligned with industry standards.
     Current content: "${current}"
 
@@ -91,13 +111,18 @@ export async function improveWithAI({ current, type }) {
     const result = await generateGeminiContent(prompt);
     const response = result.response;
     const improvedContent = response.text().trim();
-    return improvedContent;
+    return { success: true, data: improvedContent };
   } catch (error) {
     console.error("Error improving content:", error);
-    throw new Error(
-      error?.code === "RATE_LIMITED"
-        ? "AI quota reached — please try again in a few minutes."
-        : "Failed to improve content"
-    );
+    return {
+      success: false,
+      errors: {
+        _form: [
+          error?.code === "RATE_LIMITED"
+            ? "AI quota reached — please try again in a few minutes."
+            : "Failed to improve content"
+        ]
+      }
+    };
   }
 }
