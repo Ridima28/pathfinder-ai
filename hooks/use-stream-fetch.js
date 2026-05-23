@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 /**
  * Custom hook that streams AI responses from the /api/generate SSE endpoint.
@@ -40,7 +40,7 @@ export default function useStreamFetch() {
         return;
       }
 
-      const words = pending.split(/(\s+)/); 
+      const words = pending.match(/\S+\s*/g) || [];
       const take = [];
       let wordCount = 0;
 
@@ -70,6 +70,10 @@ export default function useStreamFetch() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 60000);
+
     pendingRef.current = "";
     receivingRef.current = true;
     setStreamedText("");
@@ -89,6 +93,9 @@ export default function useStreamFetch() {
         throw new Error(data.error || `Request failed (${response.status})`);
       }
 
+      if (!response.body) {
+        throw new Error("Readable stream not supported");
+      }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -110,6 +117,10 @@ export default function useStreamFetch() {
 
           if (data === "[DONE]") {
             receivingRef.current = false;
+            // Flush any remaining buffered text
+            if (pendingRef.current && !timerRef.current) {
+              startReleasing();
+            }
             return;
           }
 
@@ -134,7 +145,7 @@ export default function useStreamFetch() {
       }
 
       receivingRef.current = false;
-    } catch (err) {
+    }catch (err) {
       if (err.name === "AbortError") {
         receivingRef.current = false;
         setIsLoading(false);
@@ -145,6 +156,9 @@ export default function useStreamFetch() {
       receivingRef.current = false;
       setIsLoading(false);
     }
+    finally {
+      clearTimeout(timeoutId);
+}
   }, [startReleasing]);
 
   const reset = useCallback(() => {
@@ -160,6 +174,18 @@ export default function useStreamFetch() {
     setStreamedText("");
     setError(null);
     setIsLoading(false);
+  }, []);
+  
+  useEffect(() => {
+  return () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+  };
   }, []);
 
   return { streamedText, isLoading, error, startStream, reset };

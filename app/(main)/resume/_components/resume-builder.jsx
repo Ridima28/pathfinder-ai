@@ -90,7 +90,17 @@ export default function ResumeBuilder({ initialContent }) {
 
   useEffect(() => {
     if (saveResult && !isSaving) {
-      toast.success("Resume saved successfully!");
+      // If our new backend validation engine caught an error payload:
+      if (saveResult.success === false) {
+        const errorMessage =
+          saveResult.errors?.content?.[0] ||
+          saveResult.errors?._form?.[0] ||
+          "Server validation rejected payload parameters.";
+        toast.error(errorMessage);
+      } else {
+        // If validation passed and database entry was successful:
+        toast.success("Resume saved successfully!");
+      }
     }
     if (saveError) {
       toast.error(saveError.message || "Failed to save resume");

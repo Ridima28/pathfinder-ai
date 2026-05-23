@@ -53,10 +53,13 @@ export default function CoverLetterGenerator() {
     try {
       await generateLetterFn(data);
     } catch (error) {
-      toast.error(error.message || "Failed to generate cover letter");
+      toast.error(
+        error.message?.includes("quota")
+          ? "AI quota reached — please try again in a few minutes."
+          : error.message || "Failed to generate cover letter"
+      );
     }
   };
-
   return (
     <div className="space-y-6">
       <Card>
