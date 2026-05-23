@@ -56,13 +56,13 @@ export async function POST(request) {
   }
 
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
-    return new Response(
-      JSON.stringify({ error: "Prompt is required" }),
-      {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    return buildSseErrorResponse("Prompt is required", 400);
+  }
+
+  const promptCheck = preparePromptForGeneration(prompt);
+
+  if (!promptCheck.allowed) {
+    return buildSseErrorResponse(promptCheck.message, promptCheck.status);
   }
 
   const encoder = new TextEncoder();
