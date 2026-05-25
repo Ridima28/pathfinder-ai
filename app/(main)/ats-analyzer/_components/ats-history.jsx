@@ -44,9 +44,14 @@ function HistoryCard({ item, onDelete }) {
   const handleDelete = () => {
     startTransition(async () => {
       try {
-        await deleteATSAnalysis(item.id);
-        toast.success("Analysis deleted.");
-        onDelete(item.id);
+        const result = await deleteATSAnalysis(item.id);
+        if (result && result.success) {
+          toast.success("Analysis deleted.");
+          onDelete(item.id);
+        } else {
+          const msg = result?.errors?._form?.[0] || result?.errors?.message || "Failed to delete.";
+          toast.error(msg);
+        }
       } catch (err) {
         toast.error(err.message || "Failed to delete.");
       }
