@@ -36,7 +36,6 @@ export async function analyzeATS(rawParams) {
     const prompt = buildSecurePrompt({
       task: "You are an expert ATS (Applicant Tracking System) analyst and career coach. Analyze the resume against the job description and return a detailed ATS compatibility report.",
       untrustedData: [
-      import { normalizeAtsSuggestions } from "@/lib/ats";
         { label: "resumeContent", value: resumeContent, maxLength: 8000 },
         { label: "jobDescription", value: jobDescription, maxLength: 8000 },
         { label: "jobTitle", value: jobTitle || "Not specified", maxLength: 200 },
@@ -95,7 +94,12 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no explanation outside the JSON.
     console.error("[ATS Action Error]:", error);
     return { success: false, errors: { _form: [error.message || String(error)] } };
   }
-          const suggestions = normalizeAtsSuggestions(parsedAnalysis.suggestions);
+}
+
+/**
+ * Retrieves ATS analyses for the current user.
+ */
+export async function getATSAnalyses() {
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -141,16 +145,8 @@ export async function deleteATSAnalysis(id) {
       return { success: false, errors: { _form: ["User profile not found."] } };
     }
 
-<<<<<<< HEAD
-    await db.atsAnalysis.deleteMany({
-      where: {
-        id: id.trim(),
-        userId: user.id,
-      },
-    });
-=======
     // Ensure the record exists and belongs to the requesting user before deleting.
-    const existing = await db.aTSAnalysis.findUnique({ where: { id: id.trim() } });
+    const existing = await db.atsAnalysis.findUnique({ where: { id: id.trim() } });
     if (!existing) {
       return { success: false, errors: { _form: ["Analysis record not found."] } };
     }
@@ -159,8 +155,7 @@ export async function deleteATSAnalysis(id) {
       return { success: false, errors: { _form: ["Unauthorized: you do not own this analysis."] } };
     }
 
-    await db.aTSAnalysis.delete({ where: { id: existing.id } });
->>>>>>> 2e620d0 (fix(ats): ownership-checked delete and client handles failure before showing success (#93))
+    await db.atsAnalysis.delete({ where: { id: existing.id } });
 
     revalidatePath("/ats-analyzer");
     return { success: true };

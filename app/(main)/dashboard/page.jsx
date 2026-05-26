@@ -3,8 +3,6 @@
 import { useState, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useSearchParams, useRouter } from "next/navigation";
-import Sidebar from "./_components/Sidebar";
-import BottomNav from "./_components/BottomNav";
 import StatsCards from "./_components/StatsCards";
 import GrowthToolsGrid from "./_components/GrowthToolsGrid";
 import RecentDocs from "./_components/RecentDocs";
@@ -117,14 +115,10 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          {tab === "templates" ? <TemplatesTab /> : <OverviewContent />}
-        </div>
-      </main>
-      <BottomNav />
+    <div className="w-full">
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        {tab === "templates" ? <TemplatesTab /> : <OverviewContent />}
+      </div>
     </div>
   );
 }
